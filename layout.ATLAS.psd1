@@ -1,7 +1,7 @@
 <#
     Dev environment layout -- GENERATED. Re-running the generator replaces it.
 
-    Written : 2026-11-11 15:08:47
+    Written : 2026-11-11 15:12:39
     Machine : ATLAS
 
     Read it top-down:
@@ -23,7 +23,7 @@
 
     Version    = 4
     Machine    = 'ATLAS'
-    CapturedAt = '2026-11-11T15:08:47.3340591-05:00'
+    CapturedAt = '2026-11-11T15:12:39.2530767-05:00'
 
     # Desktop to land on when restore finishes. 0 = stay where it ends.
     ReturnToDesktopIndex = 1
@@ -43,6 +43,7 @@
         'M1.center'        = @{ Monitor = 'M1'; Col = 2; Row = 1 }   # 7 window(s)
         'M1.free'          = @{ Monitor = 'M1'; X = 2369; Y = 546; Width = 382; Height = 301 }   # 1 window(s), off-grid
         'M2.left'          = @{ Monitor = 'M2'; Col = 1; Row = 1 }   # 7 window(s)
+        'M2.center'        = @{ Monitor = 'M2'; Col = 2; Row = 1 }   # 1 window(s)
     }
 
     # Cursor folder URIs. Referenced from a window as Project = '<name>',
@@ -79,11 +80,17 @@
             GpuPreference    = 2
             # Note: Tray-anchored; it repositions itself, so position is left unmanaged.
         }
+        tabby = @{
+            Process          = 'Tabby.exe'
+            Policy           = 'launch'
+            Path             = 'C:\Program Files\Tabby\Tabby.exe'
+            Args             = @()
+        }
     }
 
     # A shape several desktops share. {project} is filled in per desktop.
     Layouts = @{
-        standard = @(   # used by 7 desktop(s)
+        standard = @(   # used by 6 desktop(s)
             @{ App = 'cursor';  Region = 'M1.left';         Project = '{project}' }
             @{ App = 'chrome';  Region = 'M1.center' }
             @{ App = 'chrome';  Region = 'M2.left' }
@@ -119,7 +126,12 @@
             Index = 5
             Name  = '5090'
             Id    = '{2965CCF2-7A97-457F-B77D-D75A7A3048D6}'
-            Layout = 'standard'; Project = 'workspace'
+            Windows = @(
+                @{ App = 'cursor';  Region = 'M1.left';         Project = 'workspace' }
+                @{ App = 'chrome';  Region = 'M1.center' }
+                @{ App = 'chrome';  Region = 'M2.left' }
+                @{ App = 'tabby';   Region = 'M2.center' }
+            )
         }
         @{
             Index = 6

@@ -1137,9 +1137,15 @@ function Start-DevEnvWindow {
         # handle meant positioning an invisible window while the real one
         # opened wherever Chrome liked, and the re-check then "verified" the
         # invisible one.
+        # AllowHidden apps (tray toolbars) may be invisible, but still need a
+        # title -- and the expected one, when the entry names it. A
+        # self-extracting app shows helper windows first; taking one of those
+        # meant the real window arrived after we had stopped looking.
         $fresh = @($now | Where-Object {
             $before -notcontains $_.Handle -and
-            ($Entry.AllowHidden -or ($_.IsVisible -and -not $_.IsToolWindow -and $_.Title))
+            -not [string]::IsNullOrWhiteSpace($_.Title) -and
+            ($Entry.AllowHidden -or ($_.IsVisible -and -not $_.IsToolWindow)) -and
+            ($null -eq $Entry.TitleContains -or $_.Title -like ('*' + $Entry.TitleContains + '*'))
         })
         if ($fresh.Count -gt 0) { return $fresh[0] }
     }
