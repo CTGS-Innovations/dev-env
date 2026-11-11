@@ -361,6 +361,32 @@ if (-not $Rehearse) {
     if ($n -gt 0) { Log ("{0} window(s) had to be re-asserted" -f $n) 'WARN' }
 }
 
+# --- verify -----------------------------------------------------------------
+# Trust nothing tracked during the run: re-read every window, match afresh,
+# and report anything not where the config says. A handle the run held on to
+# can be the wrong window; this check cannot be fooled the same way.
+if (-not $Rehearse) {
+    Set-DevEnvStatus -Step 'checking the result'
+    foreach ($e in $entries) { $e.Window = $null }
+    $live = @(Get-DevEnvWindow -IgnoreProcess $ignore)
+    Join-DevEnvWindow -Entries $entries -Windows $live
+    $off = @($entries | Where-Object { (Get-DevEnvVerdict -Entry $_) -in @('move', 'launch') })
+    Log ''
+    if ($off.Count -eq 0) {
+        Log 'verify: every window is where the layout says' 'DO'
+    } else {
+        Log ("verify: {0} window(s) NOT where the layout says:" -f $off.Count) 'WARN'
+        foreach ($e in $off) {
+            $where = if ($e.Scope -eq 'global') { '[-] global' } else { '[{0}]' -f $e.DesktopIndex }
+            $state = if ($e.Window) {
+                'is at {0},{1} {2}x{3}' -f $e.Window.FrameX, $e.Window.FrameY, $e.Window.FrameWidth, $e.Window.FrameHeight
+            } else { 'not found' }
+            Log ("      {0,-10} {1,-20} {2,-14} {3}" -f $where, $e.Process, $e.Region, $state) 'WARN'
+        }
+        Log '      Run it again to retry, or check the log above for what happened.' 'WARN'
+    }
+}
+
 # --- home -------------------------------------------------------------------
 $homeIndex = if ($config.ReturnToDesktopIndex) { [int]$config.ReturnToDesktopIndex } else { 0 }
 if ($homeIndex -gt 0) {

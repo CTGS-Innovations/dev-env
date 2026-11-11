@@ -1132,7 +1132,15 @@ function Start-DevEnvWindow {
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 250
         $now  = @(Get-DevEnvWindow -Process $Entry.Process -IgnoreProcess $IgnoreProcess)
-        $fresh = @($now | Where-Object { $before -notcontains $_.Handle })
+        # Only a REAL window counts -- the same test Join-DevEnvWindow uses.
+        # Chrome creates hidden helper windows on startup; taking the first new
+        # handle meant positioning an invisible window while the real one
+        # opened wherever Chrome liked, and the re-check then "verified" the
+        # invisible one.
+        $fresh = @($now | Where-Object {
+            $before -notcontains $_.Handle -and
+            ($Entry.AllowHidden -or ($_.IsVisible -and -not $_.IsToolWindow -and $_.Title))
+        })
         if ($fresh.Count -gt 0) { return $fresh[0] }
     }
 
