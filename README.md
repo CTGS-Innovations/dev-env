@@ -8,7 +8,9 @@ DevEnv.ps1                  the engine
 Generate.ps1                capture what's running now into this machine's config
 Restore.ps1                 replay this machine's config
 layout.<COMPUTERNAME>.psd1  one config per machine, e.g. layout.ATLAS.psd1, layout.XPS-C.psd1
-Restore-DevEnv.cmd          double-click launcher; works on any machine (written by Generate)
+Capture-DevEnv.cmd          double-click: capture this machine's layout, then review it
+Restore-DevEnv.cmd          double-click: put this machine's layout back
+capture.psd1                your answers: apps added / ignored, desktops skipped
 logs\                       one log per restore run
 ```
 
@@ -17,11 +19,18 @@ Restore loads `layout.<COMPUTERNAME>.psd1` for whichever machine it's running
 on. (`layout.psd1` is the fallback if no machine-named file exists.) Copy the
 whole folder anywhere; on a new machine, capture once and it's set.
 
-**Launchers.** Every successful Generate also writes
-`Desktop\DevEnv - <MACHINE>.cmd` — double-click to restore. It runs
-`Restore -Apply` and pauses only if something fails. Extra arguments pass
-through: `"DevEnv - ATLAS.cmd" -Desktop Main`. To recreate the launcher
-without capturing (e.g. after moving the folder): `Generate.ps1 -LauncherOnly`.
+**Two buttons.** You never need to type a command:
+
+| Double-click | What happens |
+|---|---|
+| `DevEnv Capture - <MACHINE>.cmd` | Captures your desktops exactly as they are, asks about any app it hasn't seen, then opens the layout in Notepad for review. The previous layout is kept in `_archive\`. |
+| `DevEnv Restore - <MACHINE>.cmd` | Puts it all back. Pauses only if something fails. |
+
+They're on your desktop, and the same pair (`Capture-DevEnv.cmd`,
+`Restore-DevEnv.cmd`) sits in this folder and works on any machine. Extra
+arguments pass through: `"DevEnv Restore - ATLAS.cmd" -Desktop Main`. To
+recreate them without capturing (e.g. after moving the folder):
+`Generate.ps1 -LauncherOnly`.
 
 Copy the folder to any machine. Nothing is installed and nothing is
 third-party — it calls in-box Windows only (`user32.dll`, `dwmapi.dll`,

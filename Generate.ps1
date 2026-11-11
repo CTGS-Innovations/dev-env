@@ -50,12 +50,17 @@
     plain text, edit it any time. An added app is launched from the exe it
     was running from, with no arguments.
 
-    LAUNCHERS. After a successful write it also writes, for this machine:
-      <Root>\Restore-DevEnv.cmd           portable: runs on any machine, picking
-                                          layout.<COMPUTERNAME>.psd1 itself
-      <Desktop>\DevEnv - <MACHINE>.cmd    double-click to restore; absolute paths
-    Both run Restore -Apply against this machine's config. Extra arguments are
-    passed through, e.g.  "DevEnv - ATLAS.cmd" -Desktop Main
+    LAUNCHERS. After a successful write it also writes two pairs:
+      <Root>\Restore-DevEnv.cmd                 portable: run on any machine,
+      <Root>\Capture-DevEnv.cmd                 each picks layout.<COMPUTERNAME>.psd1
+      <Desktop>\DevEnv Restore - <MACHINE>.cmd  same, absolute paths, for
+      <Desktop>\DevEnv Capture - <MACHINE>.cmd  double-clicking
+    Restore runs Restore -Apply. Capture runs this script with -Force, then
+    opens the new layout in Notepad for review. Extra arguments pass through,
+    e.g.  "DevEnv Restore - ATLAS.cmd" -Desktop Main
+
+    BACKUP. Overwriting an existing layout first copies it to
+    <Root>\_archive\layout.<COMPUTERNAME>.previous.psd1.
 
 .PARAMETER ZoneTolerance
     Pixels within which two rectangles count as the same zone. Default 12,
@@ -190,51 +195,75 @@ if ([string]::IsNullOrWhiteSpace($Out)) {
 }
 
 function Write-DevEnvLauncher {
-    # Writes the two .cmd launchers described in .NOTES. ASCII + CRLF so
-    # cmd.exe reads them correctly on any code page.
+    # Writes the launchers described in .NOTES. ASCII + CRLF so cmd.exe reads
+    # them correctly on any code page.
     param([Parameter(Mandatory)][string] $Manifest)
 
-    $restore  = Join-Path $PSScriptRoot 'Restore.ps1'
+    $here     = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
     $manifest = [IO.Path]::GetFullPath($Manifest)
+    $std      = Join-Path $here ('layout.{0}.psd1' -f $env:COMPUTERNAME)
     $stamp    = Get-Date -Format 'yyyy-MM-dd HH:mm'
     $ascii    = New-Object System.Text.ASCIIEncoding
-    $body = {
-        param($ScriptRef, $ManifestRef)
+    $ps       = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File'
+
+    # $Dir is how the launcher names the script folder: '%~dp0' for the
+    # portable copies beside the scripts, an absolute path for the desktop.
+    # With the standard config name, the layout is named by %COMPUTERNAME% at
+    # run time, so the portable copies work on any machine.
+    $layoutRef = {
+        param($Dir)
+        if ($manifest -eq $std) { '{0}layout.%COMPUTERNAME%.psd1' -f $Dir }
+        elseif ((Split-Path -Parent $manifest) -eq $here) { $Dir + (Split-Path -Leaf $manifest) }
+        else { $manifest }
+    }
+    $restoreText = {
+        param($Dir)
+        $lay = & $layoutRef $Dir
         (@(
             '@echo off'
-            ('rem DEV-ENV launcher for {0} -- written by Generate.ps1 {1}' -f $env:COMPUTERNAME, $stamp)
-            'rem Restores your virtual desktops. Keep hands off the keyboard while it runs.'
-            $(if ($ManifestRef) {
-                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -ManifestPath "{1}" -Apply %*' -f $ScriptRef, $ManifestRef
-            } else {
-                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -Apply %*' -f $ScriptRef
-            })
+            ('rem DEV-ENV restore -- written by Generate.ps1 on {0}, {1}' -f $env:COMPUTERNAME, $stamp)
+            'rem Puts your virtual desktops back. Hands off the keyboard while it runs.'
+            ('{0} "{1}Restore.ps1" -ManifestPath "{2}" -Apply %*' -f $ps, $Dir, $lay)
             'if errorlevel 1 pause'
         ) -join "`r`n") + "`r`n"
     }
-
-    # In the folder: when the config sits beside the scripts and follows the
-    # layout.<COMPUTERNAME>.psd1 naming, name no config at all -- Restore picks
-    # the one for whatever machine it is on, so the copied folder just works.
-    $local = Join-Path $PSScriptRoot 'Restore-DevEnv.cmd'
-    $here  = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
-    $std   = Join-Path $here ('layout.{0}.psd1' -f $env:COMPUTERNAME)
-    if ($manifest -eq $std) {
-        $text = & $body '%~dp0Restore.ps1' $null
-    } elseif ((Split-Path -Parent $manifest) -eq $here) {
-        $text = & $body '%~dp0Restore.ps1' ('%~dp0' + (Split-Path -Leaf $manifest))
-    } else {
-        $text = & $body $restore $manifest
+    # -NoLauncher: cmd.exe reads a batch file as it runs, so the capture must
+    # not rewrite the very file that is executing it.
+    $captureText = {
+        param($Dir)
+        $lay   = & $layoutRef $Dir
+        $outArg = if ($manifest -eq $std) { '' } else { ' -Out "{0}"' -f $lay }
+        (@(
+            '@echo off'
+            ('rem DEV-ENV capture -- written by Generate.ps1 on {0}, {1}' -f $env:COMPUTERNAME, $stamp)
+            'rem Captures your desktops exactly as they are now, asks about any app it'
+            'rem has not seen before, then opens the layout so you can review it.'
+            'rem The previous layout is kept in _archive\.'
+            ('{0} "{1}Generate.ps1" -Force -NoLauncher{2} %*' -f $ps, $Dir, $outArg)
+            'if errorlevel 1 ( pause & exit /b 1 )'
+            'echo.'
+            'echo Next: review the layout. Delete any window lines you do not want, then save.'
+            'pause'
+            ('start "" notepad "{0}"' -f $lay)
+        ) -join "`r`n") + "`r`n"
     }
-    [IO.File]::WriteAllText($local, $text, $ascii)
 
-    # On the desktop: absolute, since it lives away from the scripts.
-    $desk = Join-Path ([Environment]::GetFolderPath('Desktop')) ('DevEnv - {0}.cmd' -f $env:COMPUTERNAME)
-    [IO.File]::WriteAllText($desk, (& $body $restore $manifest), $ascii)
+    $deskDir = [Environment]::GetFolderPath('Desktop')
+    $abs     = $here + '\'
+    $files = [ordered]@{
+        (Join-Path $here 'Restore-DevEnv.cmd')                                   = (& $restoreText '%~dp0')
+        (Join-Path $here 'Capture-DevEnv.cmd')                                   = (& $captureText '%~dp0')
+        (Join-Path $deskDir ('DevEnv Restore - {0}.cmd' -f $env:COMPUTERNAME))  = (& $restoreText $abs)
+        (Join-Path $deskDir ('DevEnv Capture - {0}.cmd' -f $env:COMPUTERNAME))  = (& $captureText $abs)
+    }
+    foreach ($f in $files.Keys) { [IO.File]::WriteAllText($f, $files[$f], $ascii) }
+
+    # The single-launcher name from before the pair existed.
+    $old = Join-Path $deskDir ('DevEnv - {0}.cmd' -f $env:COMPUTERNAME)
+    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old }
 
     Write-Host 'Launchers written:' -ForegroundColor Green
-    Write-Host ('  {0}' -f $desk)
-    Write-Host ('  {0}' -f $local)
+    foreach ($f in $files.Keys) { Write-Host ('  {0}' -f $f) }
 }
 
 if ($LauncherOnly) {
@@ -849,6 +878,14 @@ if ((Test-Path -LiteralPath $Out) -and -not $Force) {
 }
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $Out) -Force | Out-Null
+if (Test-Path -LiteralPath $Out) {
+    $prevDir = Join-Path $Root '_archive'
+    New-Item -ItemType Directory -Path $prevDir -Force | Out-Null
+    $prev = Join-Path $prevDir ([IO.Path]::GetFileNameWithoutExtension($Out) + '.previous.psd1')
+    Copy-Item -LiteralPath $Out -Destination $prev -Force
+    Write-Host ''
+    Write-Host ('Previous layout kept: {0}' -f $prev)
+}
 [System.IO.File]::WriteAllText($Out, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
 
 # Prove it parses before claiming success.
