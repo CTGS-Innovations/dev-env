@@ -28,6 +28,13 @@
     per machine, side by side in the same folder. Restore picks the one whose
     name matches the machine it is running on.
 
+.PARAMETER SkipDesktop
+    Desktop name(s) never to capture, e.g. -SkipDesktop Open. Remembered in
+    capture.psd1, so you only say it once. Written as IntentionallyEmpty.
+
+.PARAMETER NoPrompt
+    Don't ask about apps it hasn't seen before; just list them.
+
 .PARAMETER NoLauncher
     Skip writing the launcher files (see NOTES).
 
@@ -36,6 +43,13 @@
     without capturing anything. Use after copying the folder somewhere new.
 
 .NOTES
+    NEW APPS. Anything with a visible window that isn't in $AppRules and that
+    you haven't answered before gets a question:
+        [y] add it    [n] never ask again    [Enter] not this time
+    Answers live in <Root>\capture.psd1 (Add / Ignore / SkipDesktops) --
+    plain text, edit it any time. An added app is launched from the exe it
+    was running from, with no arguments.
+
     LAUNCHERS. After a successful write it also writes, for this machine:
       <Root>\Restore-DevEnv.cmd           portable: runs on any machine, picking
                                           layout.<COMPUTERNAME>.psd1 itself
@@ -63,6 +77,8 @@ param(
     [string]   $Out,
     [switch]   $Force,
     [int]      $ZoneTolerance = 12,
+    [string[]] $SkipDesktop,
+    [switch]   $NoPrompt,
     [switch]   $NoLauncher,
     [switch]   $LauncherOnly,
     # Defaults to every process with a rule in $AppRules below, except those
@@ -83,7 +99,8 @@ $AppRules = @{
                                 Args=@('--profile-directory=Default','--new-window','about:blank') }
     'Cursor.exe'           = @{ Key='cursor';   Policy='launch'; Scope='desktop'
                                 Args=@('--new-window','--folder-uri','{uri}'); LaunchTimeoutSec=45 }
-    # Skip = known, but not part of a baseline. Drop Skip to include it.
+    # Skip = known, but not captured unless you say so: Generate asks about it
+    # like a new app, and a yes is remembered in capture.psd1.
     'Tabby.exe'            = @{ Key='tabby';    Policy='launch'; Scope='desktop'; Args=@(); Skip=$true }
     'explorer.exe'         = @{ Key='explorer'; Policy='launch'; Scope='desktop'; Args=@('{path}') }
     'claude.exe'           = @{ Key='claude';   Policy='place';  Scope='desktop'
@@ -105,6 +122,62 @@ $AppRules = @{
                                 GpuPreference=2
                                 Args=@('--force_high_performance_gpu')
                                 Note='Tray-anchored; it repositions itself, so position is left unmanaged.' }
+}
+
+# ---------------------------------------------------------------------------
+# capture.psd1 -- your answers about apps and desktops, remembered between runs
+# ---------------------------------------------------------------------------
+$explicitInclude = [bool]$IncludeProcess
+$settingsRoot = if ([string]::IsNullOrWhiteSpace($Root)) { $PSScriptRoot } else { $Root }
+$SettingsPath = Join-Path $settingsRoot 'capture.psd1'
+$Settings = @{ Add = @(); Ignore = @(); SkipDesktops = @() }
+if (Test-Path -LiteralPath $SettingsPath) {
+    $loaded = Import-PowerShellDataFile -LiteralPath $SettingsPath
+    foreach ($k in @('Add', 'Ignore', 'SkipDesktops')) { if ($loaded.$k) { $Settings[$k] = @($loaded.$k) } }
+}
+$settingsDirty = $false
+foreach ($d in @($SkipDesktop)) {
+    if ($d -and $Settings.SkipDesktops -notcontains $d) { $Settings.SkipDesktops += $d; $settingsDirty = $true }
+}
+
+function New-GenericRule {
+    # An app you added: launched from the exe it was running from, no args.
+    param([string] $Process)
+    $base = (($Process -replace '\.exe$', '').ToLowerInvariant() -replace '[^a-z0-9]', '')
+    if (-not $base) { $base = 'app' }
+    $key = $base; $n = 2
+    while (@($AppRules.Values | Where-Object { $_.Key -eq $key }).Count -gt 0) { $key = '{0}{1}' -f $base, $n; $n++ }
+    @{ Key = $key; Policy = 'launch'; Scope = 'desktop'; Args = @(); Generic = $true }
+}
+
+function Save-CaptureSettings {
+    $q   = { param($v) "'" + ([string]$v).Replace("'", "''") + "'" }
+    $fmt = { param($list)
+        $items = @(@($list) | Where-Object { $_ } | Sort-Object -Unique)
+        if ($items.Count -eq 0) { '@()' } else { '@(' + (($items | ForEach-Object { & $q $_ }) -join ', ') + ')' }
+    }
+    $text = (@(
+        '# What Generate.ps1 captures beyond its built-in apps. Shared by every'
+        '# machine using this folder. Edit freely; Generate also updates it when'
+        '# you answer its questions.'
+        '@{'
+        '    # Apps you said yes to: captured and launched like the built-in ones.'
+        ('    Add          = {0}' -f (& $fmt $Settings.Add))
+        ''
+        '    # Apps you said no to: never captured, never asked about again.'
+        ('    Ignore       = {0}' -f (& $fmt $Settings.Ignore))
+        ''
+        '    # Desktops (by name) never captured. Restore leaves them alone.'
+        ('    SkipDesktops = {0}' -f (& $fmt $Settings.SkipDesktops))
+        '}'
+    ) -join "`r`n") + "`r`n"
+    [IO.File]::WriteAllText($SettingsPath, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+foreach ($p in @($Settings.Add)) {
+    if (-not $p) { continue }
+    if ($AppRules.ContainsKey($p)) { $AppRules[$p].Skip = $false }
+    else { $AppRules[$p] = New-GenericRule -Process $p }
 }
 
 if (-not $IncludeProcess) {
@@ -255,10 +328,71 @@ try {
 # ---------------------------------------------------------------------------
 # Windows
 # ---------------------------------------------------------------------------
+$allWindows = @(Get-DevEnvWindow)
+$skipIds = @($desktops | Where-Object { $Settings.SkipDesktops -contains [string]$_.Name } | ForEach-Object { [string]$_.Id })
+foreach ($d in @($desktops | Where-Object { $skipIds -contains [string]$_.Id })) {
+    Write-Host ('  skipping desktop [{0}] {1} (SkipDesktops)' -f $d.Index, $d.Name)
+}
+
+# --- apps not seen before ----------------------------------------------------
+# Same "real window" test as everywhere else: visible, titled, not a tool
+# window, on a screen, and not on a skipped desktop.
+if (-not $explicitInclude) {
+    $shellNoise = @('TextInputHost.exe', 'ApplicationFrameHost.exe', 'SystemSettings.exe',
+                    'ShellExperienceHost.exe', 'StartMenuExperienceHost.exe', 'SearchHost.exe', 'LockApp.exe')
+    $unknown = @($allWindows | Where-Object {
+        $_.IsVisible -and -not $_.IsToolWindow -and -not [string]::IsNullOrWhiteSpace($_.Title) -and
+        (-not $AppRules.ContainsKey($_.Process) -or $AppRules[$_.Process].Skip) -and
+        $Settings.Ignore -notcontains $_.Process -and
+        $shellNoise -notcontains $_.Process -and
+        $skipIds -notcontains [string]$_.DesktopId -and
+        (Find-Monitor -X $_.FrameX -Y $_.FrameY -W $_.FrameWidth -H $_.FrameHeight)
+    })
+    $groupsNew = @($unknown | Group-Object Process | Sort-Object Name)
+    if ($groupsNew.Count -gt 0) {
+        $canAsk = -not $NoPrompt -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+        $deskName = @{}
+        foreach ($d in $desktops) { $deskName[[string]$d.Id] = ('[{0}] {1}' -f $d.Index, $d.Name) }
+        Write-Host ''
+        Write-Host ('  {0} app(s) not seen before:' -f $groupsNew.Count) -ForegroundColor Yellow
+        foreach ($g in $groupsNew) {
+            Write-Host ''
+            Write-Host ('    {0}  -- {1} window(s)' -f $g.Name, $g.Count) -ForegroundColor White
+            foreach ($w in ($g.Group | Select-Object -First 4)) {
+                $t = [string]$w.Title; if ($t.Length -gt 50) { $t = $t.Substring(0, 47) + '...' }
+                $where = $deskName[[string]$w.DesktopId]; if (-not $where) { $where = '[?]' }
+                Write-Host ('      {0,-16} {1}' -f $where, $t)
+            }
+            if (-not $canAsk) { continue }
+            $a = ([string](Read-Host '    Add it?  [y] add   [n] never ask again   [Enter] not this time')).Trim().ToLowerInvariant()
+            if ($a -eq 'y' -or $a -eq 'yes') {
+                if ($AppRules.ContainsKey($g.Name)) { $AppRules[$g.Name].Skip = $false }
+                else { $AppRules[$g.Name] = New-GenericRule -Process $g.Name }
+                $Settings.Add += $g.Name; $IncludeProcess += $g.Name; $settingsDirty = $true
+                Write-Host ('      added {0}' -f $g.Name) -ForegroundColor Green
+            } elseif ($a -eq 'n' -or $a -eq 'no') {
+                $Settings.Ignore += $g.Name; $settingsDirty = $true
+                Write-Host '      ignored from now on' -ForegroundColor DarkGray
+            }
+        }
+        if (-not $canAsk) {
+            Write-Host ''
+            Write-Host '    Not captured. Run Generate.ps1 in a console to be asked about them,' -ForegroundColor Yellow
+            Write-Host ('    or list them under Add / Ignore in {0}.' -f $SettingsPath) -ForegroundColor Yellow
+        }
+        Write-Host ''
+    }
+}
+if ($settingsDirty) {
+    Save-CaptureSettings
+    Write-Host ('  remembered in {0}' -f $SettingsPath)
+}
+
 $rows = @()
-foreach ($w in (Get-DevEnvWindow -Process $IncludeProcess)) {
+foreach ($w in @($allWindows | Where-Object { $IncludeProcess -contains $_.Process })) {
     $rule = $AppRules[$w.Process]
     if (-not $rule) { continue }
+    if ($rule.Scope -ne 'global' -and $skipIds -contains [string]$w.DesktopId) { continue }
 
     if ($rule.AllowHidden) {
         if ([string]::IsNullOrWhiteSpace($w.Title)) { continue }
@@ -457,8 +591,14 @@ Write-Host ('  {0} project(s) named' -f $workspaces.Count)
 $apps = @{}
 foreach ($g in ($rows | Group-Object Process)) {
     $r = $g.Group[0]; $rule = $r.Rule
-    $def = [ordered]@{ Process = $r.Process; Policy = $rule.Policy }
-    if ($rule.Policy -eq 'launch') {
+    $policy = $rule.Policy
+    $note   = $rule.Note
+    if ($rule.Generic -and $r.ExePath -like '*\WindowsApps\*') {
+        $policy = 'place'
+        $note   = 'Store-packaged app with no stable exe launch path. Positioned, never launched.'
+    }
+    $def = [ordered]@{ Process = $r.Process; Policy = $policy }
+    if ($policy -eq 'launch') {
         if ($rule.PathGlob) {
             $globs = @($rule.PathGlob | ForEach-Object { [System.Environment]::ExpandEnvironmentVariables($_) })
             $hit   = @($globs | Where-Object { Get-ChildItem -Path $_ -File -ErrorAction SilentlyContinue } | Select-Object -First 1)
@@ -473,7 +613,7 @@ foreach ($g in ($rows | Group-Object Process)) {
         if ($rule.LaunchTimeoutSec) { $def.LaunchTimeoutSec = $rule.LaunchTimeoutSec }
         if ($rule.GpuPreference)    { $def.GpuPreference = $rule.GpuPreference }
     }
-    if ($rule.Note) { $def.Note = $rule.Note }
+    if ($note) { $def.Note = $note }
     $apps[$rule.Key] = $def
 }
 
@@ -663,7 +803,11 @@ foreach ($d in $desktops) {
     W ('            Index = {0}' -f $d.Index)
     W ('            Name  = {0}' -f (Q $d.Name))
     W ('            Id    = {0}' -f (Q $d.Id))
-    if ($mine.Count -eq 0) {
+    if ($skipIds -contains [string]$d.Id) {
+        W '            # Not captured (SkipDesktops in capture.psd1). Restore leaves it alone.'
+        W '            IntentionallyEmpty = $true'
+    }
+    elseif ($mine.Count -eq 0) {
         W '            # Empty when captured. Restore never fills it or reports drift.'
         W '            IntentionallyEmpty = $true'
     }

@@ -157,7 +157,24 @@ which makes a whole desktop four lines:
   config. Add a `Timing = @{ ... }` block only to override them.
 - `Import-PowerShellDataFile` parses **data only** — a config can't execute code.
 
-### Adding an app
+### Capturing: what you see is what you get
+
+Generate captures the screen exactly as you've arranged it. Then:
+
+- **An app it hasn't seen before** gets a question: `[y]` add it, `[n]` never
+  ask again, `[Enter]` not this time. Added apps launch from the exe they were
+  running from, with no arguments; Store apps are positioned but not launched.
+- **Your answers live in `capture.psd1`** (`Add`, `Ignore`, `SkipDesktops`),
+  shared by every machine using the folder. Plain text; edit it any time.
+- **A scratch desktop** you never want captured: `Generate.ps1 -SkipDesktop Open`
+  once. It's remembered, and that desktop is written as `IntentionallyEmpty`.
+- Then review `layout.<COMPUTERNAME>.psd1`, delete any window lines you don't
+  want, save. Done.
+
+Apps needing special arguments (Chrome's profile, Cursor's folder) are built
+into `$AppRules` in `Generate.ps1`, below.
+
+### Adding an app by hand
 
 Edit `$AppRules` near the top of `Generate.ps1`. One table, and
 `-IncludeProcess` defaults from it.

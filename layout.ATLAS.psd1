@@ -1,7 +1,7 @@
 <#
     Dev environment layout -- GENERATED. Re-running the generator replaces it.
 
-    Written : 2026-11-10 19:27:38
+    Written : 2026-11-11 15:08:47
     Machine : ATLAS
 
     Read it top-down:
@@ -23,7 +23,7 @@
 
     Version    = 4
     Machine    = 'ATLAS'
-    CapturedAt = '2026-11-10T19:27:38.6573521-05:00'
+    CapturedAt = '2026-11-11T15:08:47.3340591-05:00'
 
     # Desktop to land on when restore finishes. 0 = stay where it ends.
     ReturnToDesktopIndex = 1
@@ -33,20 +33,16 @@
     # columns and rows the work area splits into.
     Monitors = @(
         @{ Key = 'M1'; Match = @{ Primary = $true; Width = 5120; Height = 1440 }; Grid = @{ Cols = 3; Rows = 1 }; FallbackDeviceName = '\\.\DISPLAY1' }
-        @{ Key = 'M2'; Match = @{ Primary = $false; Width = 3440; Height = 1440 }; Grid = @{ Cols = 3; Rows = 2 }; FallbackDeviceName = '\\.\DISPLAY2' }
+        @{ Key = 'M2'; Match = @{ Primary = $false; Width = 3440; Height = 1440 }; Grid = @{ Cols = 3; Rows = 1 }; FallbackDeviceName = '\\.\DISPLAY2' }
     )
 
     # Cells of the grid above, named. Restore computes the rectangle from
     # the live work area and measures each window's invisible border itself.
     Regions = @{
         'M1.left'          = @{ Monitor = 'M1'; Col = 1; Row = 1 }   # 7 window(s)
-        'M1.center'        = @{ Monitor = 'M1'; Col = 2; Row = 1 }   # 6 window(s)
-        'M1.free'          = @{ Monitor = 'M1'; X = 1967; Y = 320; Width = 1202; Height = 866 }   # 1 window(s), off-grid
-        'M1.free3'         = @{ Monitor = 'M1'; X = 1707; Y = 0; Width = 1929; Height = 1385 }   # 1 window(s), off-grid
-        'M1.free2'         = @{ Monitor = 'M1'; X = 4543; Y = 986; Width = 382; Height = 301 }   # 1 window(s), off-grid
-        'M1.right'         = @{ Monitor = 'M1'; Col = 3; Row = 1 }   # 1 window(s)
-        'M2.left'          = @{ Monitor = 'M2'; Col = 1; Row = 1; RowSpan = 2 }   # 6 window(s)
-        'M2.center-bottom' = @{ Monitor = 'M2'; Col = 2; Row = 2 }   # 1 window(s)
+        'M1.center'        = @{ Monitor = 'M1'; Col = 2; Row = 1 }   # 7 window(s)
+        'M1.free'          = @{ Monitor = 'M1'; X = 2369; Y = 546; Width = 382; Height = 301 }   # 1 window(s), off-grid
+        'M2.left'          = @{ Monitor = 'M2'; Col = 1; Row = 1 }   # 7 window(s)
     }
 
     # Cursor folder URIs. Referenced from a window as Project = '<name>',
@@ -68,11 +64,6 @@
             Path             = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
             Args             = @('--profile-directory=Default', '--new-window', 'about:blank')
         }
-        claude = @{
-            Process          = 'claude.exe'
-            Policy           = 'place'
-            # Note: Store-packaged app with no stable exe launch path. Positioned, never launched.
-        }
         cursor = @{
             Process          = 'Cursor.exe'
             Policy           = 'launch'
@@ -80,24 +71,19 @@
             Args             = @('--new-window', '--folder-uri', '{uri}')
             LaunchTimeoutSec = 45
         }
-        explorer = @{
-            Process          = 'explorer.exe'
-            Policy           = 'launch'
-            Path             = 'C:\Windows\Explorer.EXE'
-            Args             = @('{path}')
-        }
         mvpecho = @{
             Process          = 'MVP-Echo Toolbar.exe'
             Policy           = 'launch'
             PathGlob         = 'C:\Users\corey\Desktop\MVP-Echo.Toolbar.*.exe'
-            Args             = @()
+            Args             = @('--force_high_performance_gpu')
+            GpuPreference    = 2
             # Note: Tray-anchored; it repositions itself, so position is left unmanaged.
         }
     }
 
     # A shape several desktops share. {project} is filled in per desktop.
     Layouts = @{
-        standard = @(   # used by 4 desktop(s)
+        standard = @(   # used by 7 desktop(s)
             @{ App = 'cursor';  Region = 'M1.left';         Project = '{project}' }
             @{ App = 'chrome';  Region = 'M1.center' }
             @{ App = 'chrome';  Region = 'M2.left' }
@@ -109,12 +95,7 @@
             Index = 1
             Name  = 'Main'
             Id    = '{028EC8F2-CA5A-4F81-A3C8-F174298554C0}'
-            Windows = @(
-                @{ App = 'cursor';  Region = 'M1.left';         Project = 'neeer' }
-                @{ App = 'claude';  Region = 'M1.center' }
-                @{ App = 'chrome';  Region = 'M1.right' }
-                @{ App = 'explorer'; Region = 'M2.center-bottom'; Path = 'D:\CLAUDE_SPACE\DEV-ENV' }
-            )
+            Layout = 'standard'; Project = 'neeer'
         }
         @{
             Index = 2
@@ -132,11 +113,7 @@
             Index = 4
             Name  = 'Quick Play'
             Id    = '{8CA58D67-93CB-4124-BFA7-53233A809193}'
-            Windows = @(
-                @{ App = 'cursor';  Region = 'M1.left';         Project = 'ai_survival' }
-                @{ App = 'chrome';  Region = 'M1.free3' }
-                @{ App = 'chrome';  Region = 'M2.left' }
-            )
+            Layout = 'standard'; Project = 'ai_survival'
         }
         @{
             Index = 5
@@ -154,24 +131,19 @@
             Index = 7
             Name  = 'Gaming'
             Id    = '{CD1B367D-B09A-4D5A-BA1C-4977FBD39389}'
-            Windows = @(
-                @{ App = 'cursor';  Region = 'M1.left';         Project = 'POKEMON' }
-                @{ App = 'chrome';  Region = 'M1.center' }
-                @{ App = 'chrome';  Region = 'M1.free' }
-                @{ App = 'chrome';  Region = 'M2.left' }
-            )
+            Layout = 'standard'; Project = 'POKEMON'
         }
         @{
             Index = 8
             Name  = 'Open'
             Id    = '{D35E5075-7AC3-4A0F-BF82-59692B3D6DCF}'
-            # Empty when captured. Restore never fills it or reports drift.
+            # Not captured (SkipDesktops in capture.psd1). Restore leaves it alone.
             IntentionallyEmpty = $true
         }
     )
 
     # One instance for the whole session, not per desktop.
     Global = @(
-        @{ App = 'mvpecho'; Region = 'M1.free2'; AllowHidden = $true; NoPosition = $true; Match = @{ TitleContains = 'MVP-Echo Toolbar' } }
+        @{ App = 'mvpecho'; Region = 'M1.free'; AllowHidden = $true; NoPosition = $true; Match = @{ TitleContains = 'MVP-Echo Toolbar' } }
     )
 }
