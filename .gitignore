@@ -1,0 +1,22 @@
+# Restore run logs (one per run, regenerated constantly)
+logs/
+*.log
+
+# Local backups -- Generate.ps1 drops the previous layout here on every capture
+_archive/
+
+# Old laptop copy of the scripts (superseded by the root scripts + layout.XPS-C.psd1)
+LAPTOP/
+
+# Zipped snapshots
+*.zip
+
+# Per-machine launchers written by Generate.ps1 (e.g. "DevEnv Capture - ATLAS.cmd")
+DevEnv * - *.cmd
+
+# Windows / editor clutter
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
+.vscode/
